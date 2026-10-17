@@ -1,0 +1,371 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "Monitor de máquina",
+  "UUID": "digital.astronauta.sysmonitor",
+  "Version": "2.0.0.0",
+  "Author": "Eduardo Campos",
+  "Description": "CPU, RAM, GPU, VRAM, discos (espaço e velocidade) e rede do PC. Coleta sozinho, sem painel e sem admin.",
+  "Category": "Monitor de máquina",
+  "CategoryIcon": "imgs/category",
+  "Icon": "imgs/icon",
+  "SDKVersion": 2,
+  "CodePath": "bin/plugin.js",
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Software": {
+    "MinimumVersion": "6.5"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "CPU · Uso",
+      "UUID": "digital.astronauta.sysmonitor.cpu",
+      "Icon": "imgs/action",
+      "Tooltip": "Uso total da CPU em %. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "CPU · Temperatura",
+      "UUID": "digital.astronauta.sysmonitor.cputemp",
+      "Icon": "imgs/action",
+      "Tooltip": "Temperatura da CPU, lida do LibreHardwareMonitor (sem ele: n/d). Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "RAM · Uso",
+      "UUID": "digital.astronauta.sysmonitor.ram",
+      "Icon": "imgs/action",
+      "Tooltip": "Memória em uso, % e GB usados/total. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "GPU · Uso",
+      "UUID": "digital.astronauta.sysmonitor.gpu",
+      "Icon": "imgs/action",
+      "Tooltip": "Uso da GPU NVIDIA em % (lido do nvidia-smi). Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "GPU · Temperatura",
+      "UUID": "digital.astronauta.sysmonitor.gputemp",
+      "Icon": "imgs/action",
+      "Tooltip": "Temperatura da GPU em °C. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "GPU · VRAM",
+      "UUID": "digital.astronauta.sysmonitor.vram",
+      "Icon": "imgs/action",
+      "Tooltip": "VRAM usada / total. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "GPU · Energia",
+      "UUID": "digital.astronauta.sysmonitor.gpupower",
+      "Icon": "imgs/action",
+      "Tooltip": "Consumo da GPU em W e % do limite. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "GPU · Ventoinha",
+      "UUID": "digital.astronauta.sysmonitor.gpufan",
+      "Icon": "imgs/action",
+      "Tooltip": "Ventoinha da GPU em % da rotação máxima. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "GPU · Clock",
+      "UUID": "digital.astronauta.sysmonitor.gpuclock",
+      "Icon": "imgs/action",
+      "Tooltip": "Clock da GPU em MHz e % do máximo. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Disco · Espaço",
+      "UUID": "digital.astronauta.sysmonitor.disk",
+      "Icon": "imgs/action",
+      "Tooltip": "Espaço usado e livre de uma unidade (letra configurável). Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/disk.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Disco · Gravação",
+      "UUID": "digital.astronauta.sysmonitor.diskwrite",
+      "Icon": "imgs/action",
+      "Tooltip": "Velocidade de gravação em disco (total ou um disco). Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/io.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Disco · Leitura",
+      "UUID": "digital.astronauta.sysmonitor.diskread",
+      "Icon": "imgs/action",
+      "Tooltip": "Velocidade de leitura em disco (total ou um disco). Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/io.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Rede · Download",
+      "UUID": "digital.astronauta.sysmonitor.netdown",
+      "Icon": "imgs/action",
+      "Tooltip": "Velocidade de download em Mb/s. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Rede · Upload",
+      "UUID": "digital.astronauta.sysmonitor.netup",
+      "Icon": "imgs/action",
+      "Tooltip": "Velocidade de upload em Mb/s. Pressione para abrir o Gerenciador de Tarefas.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Dial · CPU",
+      "UUID": "digital.astronauta.sysmonitor.dialcpu",
+      "Icon": "imgs/action",
+      "Tooltip": "Gira entre uso, frequência, temperatura e threads.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Encoder"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ],
+      "Encoder": {
+        "layout": "layouts/clean.json",
+        "TriggerDescription": {
+          "Rotate": "Alternar o item",
+          "Push": "Abrir o Gerenciador de Tarefas",
+          "Touch": "Atualizar a leitura"
+        }
+      }
+    },
+    {
+      "Name": "Dial · Memória",
+      "UUID": "digital.astronauta.sysmonitor.dialmem",
+      "Icon": "imgs/action",
+      "Tooltip": "Gira entre uso %, GB usados e GB livres.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Encoder"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ],
+      "Encoder": {
+        "layout": "layouts/clean.json",
+        "TriggerDescription": {
+          "Rotate": "Alternar o item",
+          "Push": "Abrir o Gerenciador de Tarefas",
+          "Touch": "Atualizar a leitura"
+        }
+      }
+    },
+    {
+      "Name": "Dial · GPU",
+      "UUID": "digital.astronauta.sysmonitor.dialgpu",
+      "Icon": "imgs/action",
+      "Tooltip": "Gira entre uso, temperatura, VRAM, energia, ventoinha e clock.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Encoder"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ],
+      "Encoder": {
+        "layout": "layouts/clean.json",
+        "TriggerDescription": {
+          "Rotate": "Alternar o item",
+          "Push": "Abrir o Gerenciador de Tarefas",
+          "Touch": "Atualizar a leitura"
+        }
+      }
+    },
+    {
+      "Name": "Dial · Discos",
+      "UUID": "digital.astronauta.sysmonitor.dialdisk",
+      "Icon": "imgs/action",
+      "Tooltip": "Gira entre o espaço de cada unidade e a velocidade de gravação/leitura.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Encoder"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ],
+      "Encoder": {
+        "layout": "layouts/clean.json",
+        "TriggerDescription": {
+          "Rotate": "Alternar o item",
+          "Push": "Abrir o Gerenciador de Tarefas",
+          "Touch": "Atualizar a leitura"
+        }
+      }
+    },
+    {
+      "Name": "Dial · Rede",
+      "UUID": "digital.astronauta.sysmonitor.dialnet",
+      "Icon": "imgs/action",
+      "Tooltip": "Gira entre download, upload e total da sessão.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": [
+        "Encoder"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "bottom"
+        }
+      ],
+      "Encoder": {
+        "layout": "layouts/clean.json",
+        "TriggerDescription": {
+          "Rotate": "Alternar o item",
+          "Push": "Abrir o Gerenciador de Tarefas",
+          "Touch": "Atualizar a leitura"
+        }
+      }
+    }
+  ]
+}

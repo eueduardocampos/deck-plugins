@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Disco · Espaço</title>
+  <link rel="stylesheet" href="sdpi.css" />
+</head>
+<body>
+  <div class="sdpi-wrapper">
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">Unidade</div>
+      <input class="sdpi-item-value" id="drive" type="text" maxlength="3" placeholder="C" list="drives" />
+      <datalist id="drives">
+        <option value="C"></option>
+        <option value="D"></option>
+        <option value="E"></option>
+      </datalist>
+    </div>
+
+    <div class="sdpi-item">
+      <div class="sdpi-item-label"></div>
+      <button class="sdpi-item-value" id="detectar" type="button">Detectar unidades</button>
+    </div>
+
+    <div class="sdpi-item">
+      <div class="sdpi-item-label"></div>
+      <div class="sdpi-item-value">
+        <small id="achadas">
+          Digite a letra (padrão <code>C</code>). A tecla nunca varre unidades sozinha.
+        </small>
+      </div>
+    </div>
+
+    <div class="sdpi-item">
+      <div class="sdpi-item-label"></div>
+      <div class="sdpi-item-value">
+        <small>
+          Atenção: unidades do Google Drive (como <code>G:</code> e <code>I:</code>) respondem
+          com tamanho virtual e números idênticos entre si; o valor não corresponde a espaço
+          físico. Os intervalos de leitura estão nas configurações globais (qualquer outra
+          ação deste plugin).
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let uuid = null;
+    let actionInfo = null;
+    let settings = {};
+
+    const el = (id) => document.getElementById(id);
+
+    function save() {
+      const letra = (/[A-Za-z]/.exec(el("drive").value) || ["C"])[0].toUpperCase();
+      settings = { ...settings, drive: letra };
+      el("drive").value = letra;
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+      }
+    }
+
+    el("drive").addEventListener("change", save);
+    el("detectar").addEventListener("click", () => {
+      el("achadas").textContent = "Procurando unidades...";
+      ws.send(
+        JSON.stringify({
+          event: "sendToPlugin",
+          context: uuid,
+          action: actionInfo.action,
+          payload: { pedido: "drives" },
+        })
+      );
+    });
+
+    // eslint-disable-next-line no-unused-vars
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      uuid = inUUID;
+      actionInfo = JSON.parse(inActionInfo);
+      settings = (actionInfo.payload && actionInfo.payload.settings) || {};
+      el("drive").value = settings.drive || "C";
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.event === "didReceiveSettings") {
+            settings = (msg.payload && msg.payload.settings) || {};
+            el("drive").value = settings.drive || "C";
+          }
+          if (msg.event === "sendToPropertyInspector" && msg.payload && msg.payload.drives) {
+            const list = msg.payload.drives;
+            el("drives").innerHTML = "";
+            for (const d of list) {
+              const o = document.createElement("option");
+              o.value = d;
+              el("drives").appendChild(o);
+            }
+            el("achadas").textContent = "Respondem: " + (list.join(", ") || "nenhuma") + ".";
+          }
+        } catch {
+          /* ignora */
+        }
+      };
+    }
+  </script>
+</body>
+</html>

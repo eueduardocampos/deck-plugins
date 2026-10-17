@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.log
+node_modules/
+.DS_Store
+Thumbs.db
+*.streamDeckPlugin
+profiles/pessoal/

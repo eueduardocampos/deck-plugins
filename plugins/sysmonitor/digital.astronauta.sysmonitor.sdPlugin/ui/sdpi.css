@@ -1,0 +1,59 @@
+/* Estilo minimo no visual do Stream Deck. Local de proposito: o inspector nao deve
+   depender de CDN, senao quebra offline. */
+:root {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  padding: 8px;
+  background: #2d2d2d;
+  color: #d8d8d8;
+  font: 9pt/1.5 "Segoe UI", -apple-system, Helvetica, sans-serif;
+}
+.sdpi-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sdpi-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sdpi-item-label {
+  flex: 0 0 88px;
+  text-align: right;
+  color: #969696;
+}
+.sdpi-item-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid #3d3d3d;
+  border-radius: 3px;
+  background: #3d3d3d;
+  color: #d8d8d8;
+}
+.sdpi-item-value:focus {
+  outline: 1px solid #77f;
+}
+details.sdpi-item {
+  display: block;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #3d3d3d;
+  color: #969696;
+}
+details summary {
+  cursor: pointer;
+  color: #d8d8d8;
+}
+details p {
+  margin: 6px 0;
+}
+code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #1f1f1f;
+  color: #e6b673;
+}

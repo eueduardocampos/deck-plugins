@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Disco · Velocidade</title>
+  <link rel="stylesheet" href="sdpi.css" />
+</head>
+<body>
+  <div class="sdpi-wrapper">
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">Disco</div>
+      <select class="sdpi-item-value select" id="disk">
+        <option value="total">Total (todos os discos)</option>
+        <option value="C">C:</option>
+        <option value="D">D:</option>
+        <option value="E">E:</option>
+      </select>
+    </div>
+
+    <div class="sdpi-item">
+      <div class="sdpi-item-label"></div>
+      <div class="sdpi-item-value">
+        <small id="achados">
+          Total é a soma de todos os discos físicos. Escolhendo uma letra, a tecla mostra só o
+          disco onde ela está.
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let uuid = null;
+    let actionInfo = null;
+    let settings = {};
+
+    const el = (id) => document.getElementById(id);
+
+    function save() {
+      settings = { ...settings, disk: el("disk").value || "total" };
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+      }
+    }
+
+    function montar(letras) {
+      const atual = settings.disk || "total";
+      const lista = ["total"].concat(letras.filter((l) => l !== "total"));
+      if (!lista.includes(atual)) lista.push(atual);
+      el("disk").innerHTML = "";
+      for (const v of lista) {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v === "total" ? "Total (todos os discos)" : v + ":";
+        el("disk").appendChild(o);
+      }
+      el("disk").value = atual;
+    }
+
+    el("disk").addEventListener("change", save);
+
+    // eslint-disable-next-line no-unused-vars
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      uuid = inUUID;
+      actionInfo = JSON.parse(inActionInfo);
+      settings = (actionInfo.payload && actionInfo.payload.settings) || {};
+      el("disk").value = settings.disk || "total";
+
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+        // pergunta ao plugin quais discos o coletor viu (so letras que existem de fato)
+        ws.send(
+          JSON.stringify({
+            event: "sendToPlugin",
+            context: uuid,
+            action: actionInfo.action,
+            payload: { pedido: "discos" },
+          })
+        );
+      };
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.event === "didReceiveSettings") {
+            settings = (msg.payload && msg.payload.settings) || {};
+            el("disk").value = settings.disk || "total";
+          }
+          if (msg.event === "sendToPropertyInspector" && msg.payload && msg.payload.discos) {
+            montar(msg.payload.discos);
+            el("achados").textContent =
+              "Discos vistos pelo coletor: " + (msg.payload.discos.join(", ") || "nenhum ainda") + ".";
+          }
+        } catch {
+          /* ignora */
+        }
+      };
+    }
+  </script>
+</body>
+</html>

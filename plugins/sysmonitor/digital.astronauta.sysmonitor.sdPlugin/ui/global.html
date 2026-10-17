@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Monitor de máquina</title>
+  <link rel="stylesheet" href="sdpi.css" />
+</head>
+<body>
+  <div class="sdpi-wrapper">
+    <div class="sdpi-item">
+      <div class="sdpi-item-label"></div>
+      <div class="sdpi-item-value">
+        <small>
+          Lê tudo localmente: CPU e RAM em processo, GPU pelo <code>nvidia-smi</code> do driver,
+          velocidade de disco e rede por um coletor PowerShell. Nada sai da máquina.
+          Configuração global: vale para todas as teclas e dials deste plugin.
+        </small>
+      </div>
+    </div>
+
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">CPU/RAM (s)</div>
+      <input class="sdpi-item-value" id="refreshCpuSeconds" type="number" min="1" max="60" placeholder="1" />
+    </div>
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">GPU (s)</div>
+      <input class="sdpi-item-value" id="refreshGpuSeconds" type="number" min="1" max="60" placeholder="3" />
+    </div>
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">Disco, espaço (s)</div>
+      <input class="sdpi-item-value" id="refreshDiskSeconds" type="number" min="10" max="3600" placeholder="60" />
+    </div>
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">Disco/rede, vel. (s)</div>
+      <input class="sdpi-item-value" id="refreshIoSeconds" type="number" min="1" max="60" placeholder="2" />
+    </div>
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">Unidades do dial</div>
+      <input class="sdpi-item-value" id="drives" type="text" placeholder="C, D, E" />
+    </div>
+    <div class="sdpi-item">
+      <div class="sdpi-item-label">LibreHardwareMonitor</div>
+      <input class="sdpi-item-value" id="lhmUrl" type="text" placeholder="http://127.0.0.1:8085" />
+    </div>
+
+    <div class="sdpi-item">
+      <div class="sdpi-item-label"></div>
+      <div class="sdpi-item-value">
+        <small>
+          As unidades do dial são as que ele percorre; nunca é feita varredura automática de
+          letras (<code>G:</code> e <code>I:</code> são montagens do Google Drive e mostram números
+          sem sentido). A temperatura da CPU só existe com o LibreHardwareMonitor aberto e com o
+          servidor web ligado (Options &gt; Remote Web Server); sem ele a tecla mostra
+          <code>n/d</code>.
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let settings = {};
+
+    const FIELDS = ["refreshCpuSeconds", "refreshGpuSeconds", "refreshDiskSeconds", "refreshIoSeconds", "drives", "lhmUrl"];
+    const DEFAULTS = { drives: ["C", "D", "E"] };
+
+    function el(id) {
+      return document.getElementById(id);
+    }
+
+    function fill() {
+      for (const f of FIELDS) {
+        const v = settings[f] !== undefined ? settings[f] : DEFAULTS[f];
+        if (v === undefined || v === null) continue;
+        el(f).value = Array.isArray(v) ? v.join(", ") : v;
+      }
+    }
+
+    function collect() {
+      const out = {};
+      for (const f of FIELDS) {
+        const input = el(f);
+        if (f === "drives") {
+          out.drives = input.value
+            .split(/[\s,;]+/)
+            .map((d) => (/[A-Za-z]/.exec(d) || [""])[0].toUpperCase())
+            .filter((d, i, a) => d && a.indexOf(d) === i);
+        } else if (input.type === "number") {
+          out[f] = input.value === "" ? undefined : Number(input.value);
+        } else {
+          out[f] = input.value.trim() || undefined;
+        }
+      }
+      return out;
+    }
+
+    function save() {
+      settings = { ...settings, ...collect() };
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ event: "setGlobalSettings", context: pluginUUID, payload: settings }));
+      }
+    }
+
+    for (const f of FIELDS) el(f).addEventListener("change", save);
+
+    // eslint-disable-next-line no-unused-vars
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent) {
+      pluginUUID = inUUID;
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+        ws.send(JSON.stringify({ event: "getGlobalSettings", context: inUUID }));
+      };
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.event === "didReceiveGlobalSettings") {
+            settings = (msg.payload && msg.payload.settings) || {};
+            fill();
+          }
+        } catch {
+          /* ignora */
+        }
+      };
+    }
+  </script>
+</body>
+</html>
