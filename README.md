@@ -13,12 +13,12 @@ Cada página tem 8 teclas e 4 dials.
 
 | Plugin | UUID | O que mostra |
 | --- | --- | --- |
-| Monitor de máquina | `digital.astronauta.sysmonitor` | CPU, RAM, GPU (uso, temperatura, VRAM, energia, ventoinha, clock), espaço e velocidade de disco, rede. Coleta sozinho, sem administrador. |
+| Monitor de máquina | `digital.astronauta.sysmonitor` | CPU, RAM, GPU NVIDIA, AMD ou Intel (uso, temperatura, VRAM, energia, ventoinha, clock), espaço e velocidade de disco, rede. Coleta sozinho, sem administrador. |
 
 O perfil `profiles/Astronauta - Maquina.streamDeckProfile` traz 3 páginas: visão geral, GPU, e
 discos e rede. A troca de página é por swipe no touch strip.
 
-> Projeto pessoal, sem relação com a Elgato ou a NVIDIA. Até 17/10/2026 o repositório se chamava
+> Projeto pessoal, sem relação com a Elgato, a NVIDIA, a AMD ou a Intel. Até 17/10/2026 o repositório se chamava
 > `deck-plugins` e também tinha um plugin de RGB do gabinete, que saiu na v2.0.0.
 
 ## Estrutura
@@ -55,3 +55,10 @@ node test/fake_sd_sysmonitor.js          # testes (sem hardware)
 O Windows não expõe a temperatura da CPU sem um driver de kernel. A tecla `cputemp` lê o
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (servidor web
 na porta 8085, ligado nas opções dele); sem ele, mostra `n/d`.
+
+## Placa de vídeo AMD ou Intel
+
+Com placa NVIDIA, tudo vem do `nvidia-smi`, que já vem com o driver. Com placa AMD ou Intel, o uso
+e a memória de vídeo vêm do próprio Windows, os mesmos números do Gerenciador de Tarefas.
+Temperatura, energia, ventoinha e clock vêm do LibreHardwareMonitor; sem ele, essas teclas mostram
+`n/d` e dizem `sem LHM`. Em placa integrada, a tecla de VRAM mostra a memória compartilhada.

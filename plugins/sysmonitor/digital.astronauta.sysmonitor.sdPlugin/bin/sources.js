@@ -4,7 +4,10 @@
  * neste PC em 15/08/2026 e 10/10/2026), entao o agendamento e POR FONTE, nao um intervalo global:
  *
  *   CPU / RAM    ~0 ms     em processo (os.cpus com delta, os.totalmem/freemem)  refreshCpuSeconds
- *   GPU          ~65 ms    subprocesso nvidia-smi (vem com o driver)             refreshGpuSeconds
+ *   GPU NVIDIA   ~65 ms    subprocesso nvidia-smi (vem com o driver)             refreshGpuSeconds
+ *   GPU AMD/Intel  --      sem nvidia-smi: uso e memoria pelo coletor PowerShell (contadores
+ *                          GPUPerformanceCounters, os mesmos do Gerenciador de Tarefas);
+ *                          temperatura, energia, ventoinha e clock pelo LHM      refreshGpuSeconds
  *   Espaco disco ~2 ms     fs.statfs, SO das unidades configuradas               refreshDiskSeconds
  *   Temp. CPU    http      LibreHardwareMonitor (opcional) em lhmUrl/data.json   refreshGpuSeconds
  *   Disco/rede   ~0,3 s    coletor PowerShell PERSISTENTE (WMI formatado)        refreshIoSeconds
@@ -21,7 +24,8 @@
  * sumiu (confere o PID a cada ciclo) e termina — sem processo orfao.
  *
  * Modo de teste: SYSMON_FAKE=1 devolve dados sinteticos deterministicos, sem spawn de
- * nvidia-smi nem PowerShell. SYSMON_FAKE_MISSING=gpu,io,lhm simula fontes ausentes.
+ * nvidia-smi nem PowerShell. SYSMON_FAKE_MISSING=gpu,io,lhm simula fontes ausentes;
+ * SYSMON_FAKE_MISSING=nvidia simula placa AMD (caminho do Windows + LHM).
  *
  * Validacao neste PC:  node bin/sources.js --probe   (UMA leitura real, somente leitura)
  */
@@ -168,6 +172,111 @@ function findCpuTemp(root) {
   return best ? { temp: best.temp, sensor: best.sensor } : null;
 }
 
+// ================================================================ GPU sem nvidia-smi (AMD e Intel)
+
+/**
+ * Sensores de GPU no /data.json do LHM: SensorId "/gpu-amd/0/temperature/0", "/gpu-intel/0/...".
+ * Placa AMD tem prioridade sobre Intel (num PC com as duas, a AMD e a dedicada). NVIDIA so entra
+ * aqui se o nvidia-smi faltar. Devolve `{name, temp, watts, fan, clockMHz}` (campo sem sensor =
+ * null) ou null se nao houver GPU no LHM.
+ */
+function findGpuSensors(root) {
+  const grupos = new Map(); // "amd/0" -> { vendor, name, sensores: [{type, text, value}] }
+  function visit(n, hwName, depth) {
+    if (!n || typeof n !== "object" || depth > 12) return;
+    const id = String(n.SensorId || "");
+    const m = id.match(/^\/gpu-(amd|intel|nvidia)\/(\d+)\/([a-z]+)\//i);
+    if (m && Object.prototype.hasOwnProperty.call(n, "Value")) {
+      const k = `${m[1].toLowerCase()}/${m[2]}`;
+      const g = grupos.get(k) || { vendor: m[1].toLowerCase(), name: hwName || null, sensores: [] };
+      g.sensores.push({ type: m[3].toLowerCase(), text: String(n.Text || ""), value: String(n.Value || "") });
+      grupos.set(k, g);
+    }
+    // o nome da placa e o no de hardware acima dos sensores (Text sem SensorId)
+    const nome = !id && /radeon|amd|intel|arc|iris|uhd|nvidia|geforce|graphics/i.test(String(n.Text || "")) ? String(n.Text) : hwName;
+    for (const f of Array.isArray(n.Children) ? n.Children : []) visit(f, nome, depth + 1);
+  }
+  visit(root, null, 0);
+  if (!grupos.size) return null;
+  const ordem = { amd: 0, intel: 1, nvidia: 2 };
+  const g = [...grupos.values()].sort((a, b) => ordem[a.vendor] - ordem[b.vendor])[0];
+  const num = (v) => {
+    const x = parseFloat(String(v).replace(",", "."));
+    return Number.isFinite(x) ? x : null;
+  };
+  const pick = (type, prefer) => {
+    const lista = g.sensores.filter((x) => x.type === type && num(x.value) !== null);
+    for (const re of prefer) {
+      const achou = lista.find((x) => re.test(x.text));
+      if (achou) return num(achou.value);
+    }
+    return lista.length ? num(lista[0].value) : null;
+  };
+  const temp = pick("temperature", [/core|edge|^gpu$/i, /hot ?spot/i]);
+  const watts = pick("power", [/package|total|board|ppt/i, /core/i]);
+  const fanList = g.sensores.filter((x) => x.type === "control" && /fan/i.test(x.text) && num(x.value) !== null);
+  const fan = fanList.length ? num(fanList[0].value) : null;
+  const clockMHz = pick("clock", [/core|^gpu$|graphics|shader/i]);
+  return {
+    vendor: g.vendor,
+    name: g.name,
+    temp: temp !== null && temp > 0 && temp < 150 ? temp : null,
+    watts: watts !== null && watts >= 0 ? watts : null,
+    fan: fan !== null ? clamp(fan, 0, 100) : null,
+    clockMHz: clockMHz !== null && clockMHz > 0 ? clockMHz : null,
+  };
+}
+
+/** Placas que nao sao GPU de verdade (adaptador basico, area de trabalho remota, monitor virtual). */
+const GPU_FALSA = /microsoft basic|remote display|remotefx|virtual|parsec|displaylink|indirect display|\bidd\b|meta virtual|spacedesk|citrix|vmware|virtualbox|hyper-v/i;
+
+/**
+ * Parte de GPU da linha do coletor -> `{name, util, memUsedMB, memTotalMB, integrada}` ou null.
+ *   gpuEng: [{l: luid, u: % (maior motor da placa, como no Gerenciador de Tarefas)}]
+ *   gpuMem: [{l: luid, d: bytes dedicados em uso, s: bytes compartilhados em uso}]
+ *   gpuAdapters: [{n: nome do driver, v: bytes de VRAM pelo registro}]
+ * O contador nao diz o nome da placa e o registro nao diz o luid, entao: o nome e a VRAM total sao
+ * da placa com mais VRAM (a dedicada, se houver), e uso e memoria vem do luid que mais usa memoria
+ * dedicada. Placa integrada (menos de 1 GB de VRAM propria) usa memoria compartilhada: o total e
+ * metade da RAM, que e o teto que o Windows reserva para ela.
+ */
+function summarizeGpu(msg, totalRamBytes) {
+  const adapters = (Array.isArray(msg.gpuAdapters) ? msg.gpuAdapters : []).filter(
+    (a) => a && typeof a.n === "string" && !GPU_FALSA.test(a.n)
+  );
+  const mem = (Array.isArray(msg.gpuMem) ? msg.gpuMem : []).filter((m) => m && typeof m.l === "string");
+  const eng = (Array.isArray(msg.gpuEng) ? msg.gpuEng : []).filter((e) => e && typeof e.l === "string");
+  if (!adapters.length || (!mem.length && !eng.length)) return null;
+
+  const placa = adapters.slice().sort((a, b) => (Number(b.v) || 0) - (Number(a.v) || 0))[0];
+  const vramBytes = Number(placa.v) || 0;
+  const integrada = vramBytes < GB;
+
+  let luid = null;
+  if (mem.length) {
+    const campo = integrada ? "s" : "d";
+    luid = mem.slice().sort((a, b) => (Number(b[campo]) || 0) - (Number(a[campo]) || 0))[0].l;
+  } else {
+    luid = eng.slice().sort((a, b) => (Number(b.u) || 0) - (Number(a.u) || 0))[0].l;
+  }
+  const e = eng.find((x) => x.l === luid);
+  const m = mem.find((x) => x.l === luid);
+  const MB = 1048576;
+  const util = e && isNum(e.u) ? clamp(e.u, 0, 100) : null;
+  let memUsedMB = null;
+  let memTotalMB = null;
+  if (m) {
+    if (integrada) {
+      memUsedMB = isNum(m.s) ? m.s / MB : null;
+      memTotalMB = isNum(totalRamBytes) && totalRamBytes > 0 ? totalRamBytes / 2 / MB : null;
+    } else {
+      memUsedMB = isNum(m.d) ? m.d / MB : null;
+      memTotalMB = vramBytes / MB;
+    }
+  }
+  return { name: placa.n, util, memUsedMB, memTotalMB, integrada };
+}
+
 // ================================================================ coletor PowerShell
 
 /** Interfaces que nao sao trafego real: somar duplicaria ou inflaria o numero. */
@@ -178,12 +287,14 @@ const NET_VIRTUAL = /loopback|isatap|teredo|6to4|pseudo|virtual|vmware|vethernet
  * -EncodedCommand: nao depende da ExecutionPolicy (que neste PC bloqueia .ps1) nem de
  * escapar aspas na linha de comando.
  */
-function collectorScript(parentPid, intervalMs) {
+function collectorScript(parentPid, intervalMs, withGpu) {
   return `
 $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
 $parent = ${Number(parentPid) | 0}
 $interval = ${Math.max(500, Number(intervalMs) | 0)}
+$withGpu = $${withGpu ? "true" : "false"}
+$adapters = $null
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $out = [Console]::Out
 $cim = New-CimSession
@@ -195,6 +306,33 @@ while ($true) {
   $o.net = @(Get-CimInstance -CimSession $cim -ClassName Win32_PerfFormattedData_Tcpip_NetworkInterface | ForEach-Object { @{ n = [string]$_.Name; rx = [double]$_.BytesReceivedPersec; tx = [double]$_.BytesSentPersec } })
   $p = Get-CimInstance -CimSession $cim -ClassName Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'" | Select-Object -First 1
   if ($p) { $o.cpu = @{ baseMHz = [double]$p.ProcessorFrequency; perf = [double]$p.PercentProcessorPerformance } }
+  if ($withGpu) {
+    # uso por placa = maior motor (soma dos processos em cada motor), como no Gerenciador de Tarefas
+    $per = @{}
+    foreach ($e in (Get-CimInstance -CimSession $cim -ClassName Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine)) {
+      if ([string]$e.Name -match 'luid_(0x[0-9A-Fa-f]+_0x[0-9A-Fa-f]+)_phys_\\d+_eng_(\\d+)') {
+        $k = $matches[1] + '|' + $matches[2]
+        $per[$k] = [double]$per[$k] + [double]$e.UtilizationPercentage
+      }
+    }
+    $util = @{}
+    foreach ($k in $per.Keys) { $l = $k.Split('|')[0]; if (-not $util.ContainsKey($l) -or $per[$k] -gt $util[$l]) { $util[$l] = $per[$k] } }
+    $o.gpuEng = @($util.Keys | ForEach-Object { @{ l = $_; u = $util[$_] } })
+    $o.gpuMem = @(Get-CimInstance -CimSession $cim -ClassName Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory | ForEach-Object {
+      if ([string]$_.Name -match 'luid_(0x[0-9A-Fa-f]+_0x[0-9A-Fa-f]+)') { @{ l = $matches[1]; d = [double]$_.DedicatedUsage; s = [double]$_.SharedUsage } } })
+    if ($adapters -eq $null) {
+      # nome e VRAM total pelo registro (Win32_VideoController.AdapterRAM para em 4 GB); lido uma vez
+      $cls = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}'
+      $adapters = @(Get-ChildItem $cls | ForEach-Object {
+        $r = Get-ItemProperty $_.PSPath
+        if ($r.DriverDesc) {
+          $q = $r.'HardwareInformation.qwMemorySize'
+          if (-not $q) { $mm = $r.'HardwareInformation.MemorySize'; if ($mm -is [byte[]]) { $q = [BitConverter]::ToUInt32($mm, 0) } else { $q = $mm } }
+          @{ n = [string]$r.DriverDesc; v = [double]$q }
+        } })
+    }
+    $o.gpuAdapters = $adapters
+  }
   try { $out.WriteLine(($o | ConvertTo-Json -Compress -Depth 4)); $out.Flush() } catch { break }
   $rest = $interval - $sw.ElapsedMilliseconds
   if ($rest -lt 100) { $rest = 100 }
@@ -458,6 +596,9 @@ function createSources(opts = {}) {
   let gpuBusy = false;
   let gpuFails = 0;
   let gpuRetryAt = 0; // depois de ENOENT, so tenta de novo daqui a 60 s
+  // "nvidia" ate o nvidia-smi faltar; ai "windows": uso e memoria pelo coletor, o resto pelo LHM
+  let gpuMode = "nvidia";
+  let winGpu = null; // ultima leitura de GPU do coletor: { at, ...summarizeGpu }
 
   function setGpu(v) {
     data.gpu = v;
@@ -473,9 +614,62 @@ function createSources(opts = {}) {
     emit("gpu");
   }
 
+  /** Caminho do Windows: junta a ultima leitura do coletor com os sensores do LHM. */
+  function sampleWinGpu() {
+    if (fake) {
+      if (!winGpu) return;
+    } else if (!winGpu) {
+      if (data.gpu.status === "aguardando" && col) return; // coletor subindo
+      return setGpu({ status: col ? "ausente" : "coletor" });
+    }
+    if (Date.now() - winGpu.at > staleMs("gpu")) return setGpu({ status: "falha" });
+    fetchLhm((root) => {
+      if (stopped || !winGpu) return;
+      const sens = root ? findGpuSensors(root) : null;
+      setGpu({
+        status: "ok",
+        fonte: "windows",
+        lhm: !!root,
+        name: winGpu.name,
+        integrada: winGpu.integrada,
+        util: winGpu.util,
+        memUsedMB: winGpu.memUsedMB,
+        memTotalMB: winGpu.memTotalMB,
+        temp: sens ? sens.temp : null,
+        watts: sens ? sens.watts : null,
+        wattsLimit: null,
+        fan: sens ? sens.fan : null,
+        clockMHz: sens ? sens.clockMHz : null,
+        clockMaxMHz: null,
+        vramClockMHz: null,
+        vramClockMaxMHz: null,
+        memUtil: null,
+      });
+    });
+  }
+
+  function gpuFromMessage(msg) {
+    if (!("gpuAdapters" in msg) && !("gpuEng" in msg)) return;
+    const g = summarizeGpu(msg, fake ? 31.9 * GB : os.totalmem());
+    winGpu = g ? { at: Date.now(), ...g } : null;
+    if (!g && gpuMode === "windows" && data.gpu.status !== "ausente") setGpu({ status: "ausente" });
+  }
+
+  function useWindowsGpu() {
+    if (gpuMode === "windows") return;
+    gpuMode = "windows";
+    log("nvidia-smi nao encontrado; GPU pelos contadores do Windows e pelo LHM");
+    apply(); // religa o coletor com a parte de GPU
+  }
+
   function sampleGpu() {
+    if (gpuMode === "windows") return sampleWinGpu();
     if (fake) {
       if (fakeMissing.has("gpu")) return setGpu({ status: "ausente" });
+      if (fakeMissing.has("nvidia")) {
+        useWindowsGpu();
+        return sampleWinGpu();
+      }
       return setGpu({
         status: "ok",
         util: 26,
@@ -505,6 +699,7 @@ function createSources(opts = {}) {
         if (err) {
           if (err.code === "ENOENT") {
             gpuRetryAt = Date.now() + 60000;
+            if (process.platform === "win32") return useWindowsGpu();
             if (data.gpu.status !== "ausente") log("nvidia-smi nao encontrado; GPU = n/d");
             return setGpu({ status: "ausente" });
           }
@@ -527,7 +722,53 @@ function createSources(opts = {}) {
 
   // ---------------------------------------------------------------- temperatura de CPU (LHM)
 
-  let lhmBusy = false;
+  // Uma leitura do /data.json serve a temperatura da CPU e os sensores da GPU no mesmo ciclo
+  let lhmCache = { at: 0, root: null };
+  let lhmWaiting = null; // callbacks esperando a leitura em andamento
+
+  /** cb(root) com a arvore do LHM, ou cb(null) se ele nao respondeu. Cache de 1 s. */
+  function fetchLhm(cb) {
+    if (fake && fakeMissing.has("lhm")) return cb(null);
+    if (Date.now() - lhmCache.at < 1000) return cb(lhmCache.root);
+    if (lhmWaiting) return lhmWaiting.push(cb);
+    lhmWaiting = [cb];
+    let done = false;
+    const fim = (root) => {
+      if (done) return;
+      done = true;
+      lhmCache = { at: Date.now(), root };
+      const fila = lhmWaiting;
+      lhmWaiting = null;
+      for (const f of fila) f(root);
+    };
+    let req;
+    try {
+      req = http.get(`${cfg.lhmUrl}/data.json`, { timeout: 2500 }, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return fim(null);
+        }
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => {
+          body += c;
+          if (body.length > 4e6) req.destroy();
+        });
+        res.on("end", () => {
+          try {
+            fim(JSON.parse(body));
+          } catch {
+            fim(null);
+          }
+        });
+        res.on("error", () => fim(null));
+      });
+    } catch {
+      return fim(null);
+    }
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => fim(null));
+  }
 
   function setCpuTemp(v) {
     data.cputemp = v;
@@ -540,43 +781,12 @@ function createSources(opts = {}) {
 
   function sampleCpuTemp() {
     if (fake && fakeMissing.has("lhm")) return setCpuTemp({ status: "sem-lhm" });
-    if (lhmBusy) return;
-    lhmBusy = true;
-    let done = false;
-    const fim = (v) => {
-      if (done) return;
-      done = true;
-      lhmBusy = false;
-      if (!stopped) setCpuTemp(v);
-    };
-    let req;
-    try {
-      req = http.get(`${cfg.lhmUrl}/data.json`, { timeout: 2500 }, (res) => {
-        if (res.statusCode !== 200) {
-          res.resume();
-          return fim({ status: "sem-lhm" });
-        }
-        let body = "";
-        res.setEncoding("utf8");
-        res.on("data", (c) => {
-          body += c;
-          if (body.length > 4e6) req.destroy();
-        });
-        res.on("end", () => {
-          try {
-            const t = findCpuTemp(JSON.parse(body));
-            fim(t ? { status: "ok", temp: t.temp, sensor: t.sensor } : { status: "sem-sensor" });
-          } catch {
-            fim({ status: "sem-sensor" });
-          }
-        });
-        res.on("error", () => fim({ status: "sem-lhm" }));
-      });
-    } catch {
-      return fim({ status: "sem-lhm" });
-    }
-    req.on("timeout", () => req.destroy());
-    req.on("error", () => fim({ status: "sem-lhm" }));
+    fetchLhm((root) => {
+      if (stopped) return;
+      if (!root) return setCpuTemp({ status: "sem-lhm" });
+      const t = findCpuTemp(root);
+      setCpuTemp(t ? { status: "ok", temp: t.temp, sensor: t.sensor } : { status: "sem-sensor" });
+    });
   }
 
   // ---------------------------------------------------------------- espaco de disco
@@ -644,6 +854,7 @@ function createSources(opts = {}) {
   let colRestartTimer = null;
   let colBackoff = 0;
   let colIntervalSec = null;
+  let colGpu = false; // o coletor em andamento tambem le a GPU?
   let colPid = null;
   let colLastLineAt = 0;
   let colWatchdog = null;
@@ -652,6 +863,8 @@ function createSources(opts = {}) {
   let totalUp = 0;
 
   function ioFromMessage(msg) {
+    gpuFromMessage(msg);
+    if (!want("io")) return; // coletor ligado so pela GPU
     const sum = summarizeIo(msg);
     const now = Date.now();
     const ts = isNum(msg.ts) ? msg.ts : now;
@@ -692,6 +905,21 @@ function createSources(opts = {}) {
   }
 
   function sampleFakeIo() {
+    if (gpuMode === "windows") {
+      gpuFromMessage({
+        gpuEng: [{ l: "0x0_0xA1", u: 41 }, { l: "0x0_0xB2", u: 3 }],
+        gpuMem: [
+          { l: "0x0_0xA1", d: 3.2 * GB, s: 0.1 * GB },
+          { l: "0x0_0xB2", d: 0.05 * GB, s: 0.6 * GB },
+        ],
+        gpuAdapters: [
+          { n: "AMD Radeon RX 7800 XT", v: 16 * GB },
+          { n: "Intel(R) UHD Graphics 770", v: 128 * 1048576 },
+          { n: "Microsoft Basic Display Adapter", v: 0 },
+        ],
+      });
+    }
+    if (!want("io")) return;
     if (fakeMissing.has("io")) {
       data.io = { status: "coletor" };
       data.cpufreq = { status: "coletor" };
@@ -732,7 +960,7 @@ function createSources(opts = {}) {
       data.cpufreq = { status: "coletor" };
       return emit("io");
     }
-    const script = collectorScript(process.pid, cfg.refreshIoSeconds * 1000);
+    const script = collectorScript(process.pid, cfg.refreshIoSeconds * 1000, colGpu);
     const b64 = Buffer.from(script, "utf16le").toString("base64");
     let child;
     try {
@@ -864,15 +1092,18 @@ function createSources(opts = {}) {
     const ligouDisk = ensure("disk", want("disk"), cfg.refreshDiskSeconds * 1000, sampleDisks);
     if (want("disk") && (ligouDisk || mudouDrives)) sampleDisks();
 
+    const gpuWin = gpuMode === "windows" && want("gpu");
     if (fake) {
-      if (ensure("io", want("io"), cfg.refreshIoSeconds * 1000, sampleFakeIo)) {
+      if (ensure("io", want("io") || gpuWin, cfg.refreshIoSeconds * 1000, sampleFakeIo)) {
         data.io = { status: "aguardando" };
         data.cpufreq = { status: "aguardando" };
         sampleFakeIo();
       }
-    } else if (want("io")) {
-      if (col && colIntervalSec !== cfg.refreshIoSeconds) stopCollector(); // intervalo mudou: religa
+    } else if (want("io") || gpuWin) {
+      // intervalo mudou, ou a GPU entrou/saiu do coletor: religa
+      if (col && (colIntervalSec !== cfg.refreshIoSeconds || colGpu !== gpuWin)) stopCollector();
       colIntervalSec = cfg.refreshIoSeconds;
+      colGpu = gpuWin;
       startCollector();
     } else if (colWanted || col) {
       stopCollector();
@@ -1077,6 +1308,8 @@ module.exports = {
   createSources,
   parseGpuLine,
   findCpuTemp,
+  findGpuSensors,
+  summarizeGpu,
   parseCollectorLine,
   summarizeIo,
   collectorScript,

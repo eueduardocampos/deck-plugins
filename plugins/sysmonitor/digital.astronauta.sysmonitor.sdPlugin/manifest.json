@@ -2,7 +2,7 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Monitor de máquina",
   "UUID": "digital.astronauta.sysmonitor",
-  "Version": "2.0.0.0",
+  "Version": "2.1.0.0",
   "Author": "Eduardo Campos",
   "Description": "CPU, RAM, GPU, VRAM, discos (espaço e velocidade) e rede do PC. Coleta sozinho, sem painel e sem admin.",
   "Category": "Monitor de máquina",
@@ -75,7 +75,7 @@
       "Name": "GPU · Uso",
       "UUID": "digital.astronauta.sysmonitor.gpu",
       "Icon": "imgs/action",
-      "Tooltip": "Uso da GPU NVIDIA em % (lido do nvidia-smi). Pressione para abrir o Gerenciador de Tarefas.",
+      "Tooltip": "Uso da GPU em %: NVIDIA pelo nvidia-smi, AMD e Intel pelos contadores do Windows. Pressione para abrir o Gerenciador de Tarefas.",
       "PropertyInspectorPath": "ui/global.html",
       "Controllers": [
         "Keypad"

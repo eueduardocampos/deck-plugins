@@ -87,7 +87,7 @@ function unitTests() {
   assert(m.UUID === NS, `UUID = ${NS}`);
   assert(m.SDKVersion === 2 && m.Nodejs && m.Nodejs.Version === "20", "SDKVersion 2, Nodejs 20");
   assert(m.Software && m.Software.MinimumVersion === "6.5", "Software.MinimumVersion 6.5");
-  assert(/^2\.0\.0\.0$/.test(m.Version), `Version 2.0.0.0 (${m.Version})`);
+  assert(/^2\.1\.0\.0$/.test(m.Version), `Version 2.1.0.0 (${m.Version})`);
   assert(
     Array.isArray(m.OS) && m.OS.length === 1 && m.OS[0].Platform === "windows" && m.OS[0].MinimumVersion === "10",
     "OS: windows 10+"
@@ -658,7 +658,7 @@ async function scenarioSemDado() {
 
       const t = (c) => ctl.texts(c);
       for (const a of ["gpu", "gputemp", "vram", "gpupower", "gpufan", "gpuclock"]) {
-        assert(t(`ctx-${a}`)[1] === "n/d" && t(`ctx-${a}`)[2] === "sem nvidia-smi", `.${a}: n/d (${t(`ctx-${a}`)[2]}) com nvidia-smi ausente`);
+        assert(t(`ctx-${a}`)[1] === "n/d" && t(`ctx-${a}`)[2] === "sem GPU", `.${a}: n/d (${t(`ctx-${a}`)[2]}) sem GPU`);
       }
       assert(t("ctx-cputemp")[1] === "n/d" && t("ctx-cputemp")[2] === "sem LHM", `cputemp: n/d (${t("ctx-cputemp")[2]}) com LHM fora do ar`);
       for (const a of ["diskwrite", "diskread", "netdown", "netup"]) {
@@ -692,6 +692,83 @@ async function scenarioSemDado() {
     },
   });
   assert(r.exited && r.code === 0, `plugin sai sozinho (exit 0) (${r.code})`);
+}
+
+// ================================================================ 2b. placa AMD (sem nvidia-smi)
+
+/** LHM de um PC com Radeon e Intel integrada: os sensores da Radeon tem que vencer. */
+const LHM_AMD = {
+  Text: "Sensor",
+  Children: [
+    {
+      Text: "ASTRO-PC",
+      Children: [
+        {
+          Text: "Intel Core i7-12700K",
+          ImageURL: "images_icon/cpu.png",
+          Children: [{ Text: "CPU Package", Value: "52,0 °C", Type: "Temperature", SensorId: "/intelcpu/0/temperature/0" }],
+        },
+        {
+          Text: "Intel(R) UHD Graphics 770",
+          Children: [{ Text: "GPU Core", Value: "45,0 °C", SensorId: "/gpu-intel/0/temperature/0" }],
+        },
+        {
+          Text: "AMD Radeon RX 7800 XT",
+          Children: [
+            { Text: "GPU Core", Value: "61,0 °C", SensorId: "/gpu-amd/0/temperature/0" },
+            { Text: "GPU Hot Spot", Value: "74,0 °C", SensorId: "/gpu-amd/0/temperature/1" },
+            { Text: "GPU Package", Value: "143,5 W", SensorId: "/gpu-amd/0/power/0" },
+            { Text: "GPU Fan", Value: "38 %", SensorId: "/gpu-amd/0/control/0" },
+            { Text: "GPU Core", Value: "2310 MHz", SensorId: "/gpu-amd/0/clock/0" },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const GPU_KEYS = ["gpu", "gputemp", "vram", "gpupower", "gpufan", "gpuclock"];
+
+async function scenarioAmd() {
+  console.log("\n== 2b. placa AMD: uso e memoria pelo Windows, sensores pelo LHM ==");
+  const instances = GPU_KEYS.map((a) => ({ action: a, context: `ctx-${a}`, controller: "Keypad", settings: {} }));
+  const ctxs = instances.map((i) => i.context);
+  const lhm = await startFakeLhm(LHM_AMD);
+  const r = await session({
+    env: { SYSMON_FAKE: "1", SYSMON_FAKE_MISSING: "nvidia" },
+    global: { refreshCpuSeconds: 1, refreshGpuSeconds: 1, refreshDiskSeconds: 10, refreshIoSeconds: 1, lhmUrl: lhm.url, drives: ["C"] },
+    instances,
+    script: async (ctl) => {
+      await waitFor(() => ctl.texts("ctx-gpu")[1] === "41%" && ctl.texts("ctx-gpuclock")[1] === "2310", 6000);
+      printTable(ctl, ctxs);
+      checkNoBlank(ctl, ctxs, "AMD");
+      const t = (c) => ctl.texts(c);
+      assert(t("ctx-gpu")[1] === "41%", `gpu: uso do Windows (${t("ctx-gpu")[1]})`);
+      assert(t("ctx-gputemp")[1] === "61°C", `gputemp: GPU Core da Radeon, nao da Intel (${t("ctx-gputemp")[1]})`);
+      assert(t("ctx-vram")[1] === "20%" && /3\.2\/16 GB/.test(t("ctx-vram")[2]), `vram: dedicada da Radeon (${t("ctx-vram")[1]} ${t("ctx-vram")[2]})`);
+      assert(/^144 W$|^143 W$/.test(t("ctx-gpupower")[1]), `gpupower: GPU Package (${t("ctx-gpupower")[1]})`);
+      assert(t("ctx-gpufan")[1] === "38%", `gpufan: controle da ventoinha (${t("ctx-gpufan")[1]})`);
+    },
+  });
+  lhm.srv.close();
+  assert(r.exited && r.code === 0, `plugin sai sozinho (exit 0) (${r.code})`);
+
+  console.log("\n== 2c. placa AMD sem LHM: uso e memoria seguem, o resto diz sem LHM ==");
+  const r2 = await session({
+    env: { SYSMON_FAKE: "1", SYSMON_FAKE_MISSING: "nvidia" },
+    global: { refreshCpuSeconds: 1, refreshGpuSeconds: 1, refreshDiskSeconds: 10, refreshIoSeconds: 1, lhmUrl: "http://127.0.0.1:1", drives: ["C"] },
+    instances,
+    script: async (ctl) => {
+      await waitFor(() => ctl.texts("ctx-gpu")[1] === "41%" && ctl.texts("ctx-gputemp")[2] === "sem LHM", 6000);
+      printTable(ctl, ctxs);
+      const t = (c) => ctl.texts(c);
+      assert(t("ctx-gpu")[1] === "41%" && t("ctx-vram")[1] === "20%", `uso e VRAM sem LHM (${t("ctx-gpu")[1]}, ${t("ctx-vram")[1]})`);
+      for (const a of ["gputemp", "gpupower", "gpufan", "gpuclock"]) {
+        assert(t(`ctx-${a}`)[1] === "n/d" && t(`ctx-${a}`)[2] === "sem LHM", `.${a}: n/d (${t(`ctx-${a}`)[2]}) sem LHM`);
+      }
+    },
+  });
+  assert(r2.exited && r2.code === 0, `plugin sai sozinho (exit 0) (${r2.code})`);
 }
 
 // ================================================================ 3. modo --real
@@ -833,6 +910,7 @@ async function scenarioReal() {
     if (!REAL) {
       await scenarioCompleto();
       await scenarioSemDado();
+      await scenarioAmd();
     } else {
       await scenarioReal();
     }

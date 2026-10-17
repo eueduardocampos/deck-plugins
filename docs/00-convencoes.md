@@ -111,7 +111,12 @@ Detalhes fixados na implementação (v2.0.0):
   aviso/crítico: cpu e ram 80/95, gpu e vram 85/95, gputemp 75/85, cputemp 80/90, disk 85/95, gpufan 80/95.
 - Dado mais velho que 4× o intervalo da fonte vira `n/d`; a tecla nunca finge estar viva.
 - Temperatura da CPU: LibreHardwareMonitor em `lhmUrl`; sem ele, `n/d` e o `dialcpu` omite o item.
-- Limitações: só a primeira GPU NVIDIA; CPU % vem de `os.cpus()` (o Gerenciador de Tarefas usa
+- GPU AMD e Intel (sem `nvidia-smi`): uso e memória pelo coletor PowerShell (`GPUPerformanceCounters`,
+  os mesmos do Gerenciador de Tarefas); nome e VRAM total pelo registro; temperatura, energia,
+  ventoinha e clock pelo LibreHardwareMonitor (sem ele, essas teclas dizem `sem LHM`). Placa
+  integrada (menos de 1 GB de VRAM própria) mostra a memória compartilhada, com teto de metade da RAM.
+- Limitações: só a primeira GPU NVIDIA; com AMD e Intel juntas, vale a de mais VRAM (o contador do
+  Windows não diz o nome da placa, então o uso vem da que mais usa memória dedicada); CPU % vem de `os.cpus()` (o Gerenciador de Tarefas usa
   "Processor Utility", pode diferir alguns pontos); o filtro de interfaces de rede é heurístico.
 
 ## Perfil

@@ -41,7 +41,7 @@ lugar e não sobrescreve.
 
 | Plugin | Precisa de | Opcional |
 | --- | --- | --- |
-| `sysmonitor` | nada além do Windows. GPU NVIDIA: o `nvidia-smi` que vem com o driver. | [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) com o *Remote Web Server* ligado (porta 8085), para a temperatura da CPU. Sem ele, a tecla mostra `n/d`. |
+| `sysmonitor` | nada além do Windows. Placa NVIDIA: o `nvidia-smi` que vem com o driver. Placa AMD ou Intel: nada, o uso e a memória vêm do próprio Windows. | [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) com o *Remote Web Server* ligado (porta 8085), para a temperatura da CPU e, em placa AMD ou Intel, para temperatura, energia, ventoinha e clock da GPU. Sem ele, essas teclas mostram `n/d`. |
 
 Se você usava a v1.0.0: o plugin de RGB saiu deste repositório. Se ele foi instalado por junction, as
 páginas de RGB do perfil antigo "Máquina e RGB" deixam de funcionar quando você atualiza. Importe o

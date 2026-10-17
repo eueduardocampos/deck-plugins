@@ -37,7 +37,7 @@
  *     cpu:     { status, pct, threads, busy }               // busy = threads acima de 50%
  *     cpufreq: { status, mhz, baseMHz }                     // vem do coletor PowerShell
  *     ram:     { status, pct, usedGB, freeGB, totalGB }
- *     gpu:     { status, util, temp, memUsedMB, memTotalMB, watts, wattsLimit, fan,
+ *     gpu:     { status, fonte?, lhm?, integrada?, util, temp, memUsedMB, memTotalMB, watts, wattsLimit, fan,
  *                clockMHz, clockMaxMHz, name, ... }
  *     cputemp: { status, temp, sensor }
  *     disks:   { C: { status, pct, freeGB, totalGB }, ... }
@@ -186,7 +186,7 @@ function reason(src) {
     case "aguardando":
       return { value: "...", sub: "lendo" };
     case "ausente":
-      return { value: "n/d", sub: "sem nvidia-smi" };
+      return { value: "n/d", sub: "sem GPU" };
     case "sem-lhm":
       return { value: "n/d", sub: "sem LHM" };
     case "sem-sensor":
@@ -293,12 +293,16 @@ function ramGbView(st, quanto, o = {}) {
   });
 }
 
-/** Constroi a view de uma metrica da GPU; `fn` devolve null se o campo veio vazio (`[N/A]`). */
+/**
+ * Constroi a view de uma metrica da GPU; `fn` devolve null se o campo veio vazio (`[N/A]`).
+ * Placa AMD/Intel (fonte "windows"): temperatura, energia, ventoinha e clock so existem com o
+ * LHM ligado, entao o motivo do n/d e "sem LHM", nao "sem sensor".
+ */
 function gpuView(st, metric, label, fn) {
   const b = base(st, metric, label, "gpu");
   const g = st && st.gpu;
   if (!g || g.status !== "ok") return semDado(b, g);
-  return fn(g, b) || semDado(b, { status: "sem-sensor" });
+  return fn(g, b) || semDado(b, { status: g.fonte === "windows" && !g.lhm ? "sem-lhm" : "sem-sensor" });
 }
 
 function gpuUsoView(st, o = {}) {
@@ -333,7 +337,7 @@ function vramView(st, o = {}) {
     const pct = (100 * g.memUsedMB) / g.memTotalMB;
     return pronto(b, {
       value: `${rd(pct)}%`,
-      sub: `${fmtNum(g.memUsedMB / 1024)}/${rd(g.memTotalMB / 1024)} GB`,
+      sub: `${fmtNum(g.memUsedMB / 1024)}/${rd(g.memTotalMB / 1024)} GB${g.integrada ? " comp." : ""}`,
       level: levelFor("vram", pct),
       pct: pctClamp(pct),
     });
