@@ -3,7 +3,21 @@
 Funciona no **Windows 10/11** com **Stream Deck +** (8 teclas e 4 dials) e o app do Stream Deck 6.5
 ou mais novo. O plugin é Node puro, sem `npm install`.
 
-## Rápido
+## Com dois cliques
+
+1. Na [página de releases](https://github.com/eueduardocampos/stream-deck-plugins/releases/latest),
+   baixe os dois arquivos: `digital.astronauta.sysmonitor.streamDeckPlugin` e
+   `Astronauta - Maquina.streamDeckProfile`.
+2. Dê dois cliques no `.streamDeckPlugin`. O app do Stream Deck abre e instala o plugin.
+3. Dê dois cliques no `.streamDeckProfile` para importar as 3 páginas.
+4. Troque de página com o *swipe* no touch strip.
+
+Não precisa de Terminal, de Node nem de administrador. Para atualizar, baixe o `.streamDeckPlugin`
+da release nova e dê dois cliques de novo.
+
+## Pelo código
+
+Para quem quer mexer no plugin. As edições no repositório aparecem no Stream Deck sem reinstalar.
 
 ```powershell
 git clone https://github.com/eueduardocampos/stream-deck-plugins
@@ -19,6 +33,9 @@ Depois:
 1. Feche o Stream Deck pela bandeja do Windows (**Quit**) e abra de novo.
 2. Dê dois cliques em `profiles\Astronauta - Maquina.streamDeckProfile`.
 3. Troque de página com o *swipe* no touch strip.
+
+Não instale das duas formas ao mesmo tempo: o script avisa se já existe um plugin instalado em outro
+lugar e não sobrescreve.
 
 ## O que precisa
 

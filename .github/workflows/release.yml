@@ -1,0 +1,42 @@
+name: Instalador do plugin
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  pacote:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Sincronizar lib e testar
+        run: |
+          node scripts/sync-lib.js
+          git diff --exit-code -- plugins
+          node test/fake_sd_sysmonitor.js
+          python -I profiles/build_profile.py --check
+      - name: Validar e empacotar
+        run: |
+          npx --yes @elgato/cli validate plugins/sysmonitor/digital.astronauta.sysmonitor.sdPlugin
+          npx --yes @elgato/cli pack plugins/sysmonitor/digital.astronauta.sysmonitor.sdPlugin -o dist-release --no-file-list
+          cp "profiles/Astronauta - Maquina.streamDeckProfile" dist-release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador
+          if-no-files-found: error
+          path: dist-release/*
+      - name: Publicar
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist-release/* --repo "${{ github.repository }}" \
+            --title "Stream Deck Plugins $TAG" --notes-file "docs/release-$TAG.md" --verify-tag

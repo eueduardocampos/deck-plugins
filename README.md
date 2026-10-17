@@ -27,15 +27,20 @@ discos e rede. A troca de página é por swipe no touch strip.
 lib/               renderizador (render.js) e WebSocket (ws.js) canônicos
 plugins/           o .sdPlugin do monitor
 profiles/          gerador do perfil (.streamDeckProfile)
-scripts/           instalador e sync-lib.js
+scripts/           instalador pelo código e sync-lib.js
 test/              Stream Deck falso
 docs/00-convencoes.md   contrato: ações, settings, páginas
 ```
 
 ## Instalação
 
-Veja o [INSTALL.md](INSTALL.md): um script instala o plugin sem administrador, e há um roteiro para
-um agente de IA instalar para você.
+Baixe o `digital.astronauta.sysmonitor.streamDeckPlugin` na
+[página de releases](https://github.com/eueduardocampos/stream-deck-plugins/releases/latest) e dê
+dois cliques. Depois, dois cliques no perfil `Astronauta - Maquina.streamDeckProfile`, que está na
+mesma página.
+
+Para instalar pelo código, e para o roteiro de um agente de IA instalar para você, veja o
+[INSTALL.md](INSTALL.md).
 
 ## Como usar
 
